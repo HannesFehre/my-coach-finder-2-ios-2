@@ -30,11 +30,6 @@
             align-items: center;
             color: white;
             z-index: 9999;
-            transition: opacity 0.5s ease-out;
-        }
-        #splash.hide {
-            opacity: 0;
-            pointer-events: none;
         }
         #splash h1 {
             font-size: 32px;
@@ -65,23 +60,6 @@
 
         console.log('[App] Starting My-Coach-Finder iOS App');
         console.log('[App] Platform:', Capacitor.getPlatform());
-
-        // Automatically add ?os=apple to all my-coach-finder.com URLs
-        function addOSParam(url) {
-            if (!url.includes('my-coach-finder.com')) {
-                return url;
-            }
-
-            if (url.includes('os=apple') || url.includes('os=android') || url.includes('os=ios')) {
-                console.log('[App] URL already has os parameter:', url);
-                return url;
-            }
-
-            const separator = url.includes('?') ? '&' : '?';
-            const newUrl = url + separator + 'os=apple';
-            console.log('[App] Added os=apple:', url, '→', newUrl);
-            return newUrl;
-        }
 
         // Import and initialize Google Auth plugin
         let GoogleAuth;
@@ -121,32 +99,15 @@
             }
         });
 
-        // Intercept link clicks to add os=apple
-        document.addEventListener('click', function(e) {
-            let el = e.target;
-
-            for (let i = 0; i < 10 && el; i++) {
-                if (el.tagName === 'A' && el.href) {
-                    const originalHref = el.href;
-                    const newHref = addOSParam(originalHref);
-
-                    if (newHref !== originalHref) {
-                        console.log('[App] Intercepting link click');
-                        e.preventDefault();
-                        window.location.href = newHref;
-                        return;
-                    }
-                }
-                el = el.parentElement;
-            }
-        }, true);
-
-        // Redirect to web app with os=apple
+        // Redirect to web app
+        // Note: The native iOS code (AppDelegate.swift) automatically adds ?os=apple
+        // to ALL my-coach-finder.com URLs at the WKWebView level
         setTimeout(() => {
-            const targetUrl = addOSParam('https://app.my-coach-finder.com/go');
+            const targetUrl = 'https://app.my-coach-finder.com/go';
             console.log('[App] Redirecting to:', targetUrl);
+            console.log('[App] Note: Native iOS will automatically add ?os=apple parameter');
             window.location.href = targetUrl;
-        }, 2000);
+        }, 1500);
     </script>
 </body>
 </html>
