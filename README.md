@@ -91,6 +91,24 @@ All navigation to my-coach-finder.com URLs automatically adds `?os=apple`:
 
 This is implemented in `www/index.html` using JavaScript URL interception.
 
+## Git Setup
+
+The project is initialized with git and ready to push:
+
+```bash
+# The repository is already initialized and committed
+# To push to GitHub (requires authentication):
+git push -u origin main
+```
+
+Or use GitHub CLI:
+```bash
+gh auth login
+git push -u origin main
+```
+
+Repository: https://github.com/HannesFehre/my-coach-finder-2-ios-2
+
 ## CodeMagic CI/CD
 
 This app is configured to work with CodeMagic for automated builds and App Store distribution:
