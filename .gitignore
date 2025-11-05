@@ -1,0 +1,34 @@
+# Node
+node_modules/
+npm-debug.log
+package-lock.json
+
+# iOS
+ios/App/Pods/
+ios/App/Podfile.lock
+ios/App/App.xcworkspace/xcuserdata/
+ios/App/App.xcodeproj/xcuserdata/
+ios/App/App.xcodeproj/project.xcworkspace/xcuserdata/
+*.xcuserstate
+*.xcuserdatad
+DerivedData/
+build/
+
+# Capacitor
+.capacitor/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Certificates (optional - uncomment if you don't want to commit them)
+# *.p12
+# *.mobileprovision
+# *.cer

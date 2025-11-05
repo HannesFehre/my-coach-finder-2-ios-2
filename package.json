@@ -1,0 +1,25 @@
+{
+  "name": "my-coach-finder-ios",
+  "version": "1.1.13",
+  "description": "My-Coach-Finder iOS App - Clean Build",
+  "main": "index.html",
+  "scripts": {
+    "build": "echo 'No build needed'",
+    "ios": "cap sync ios && cap open ios"
+  },
+  "keywords": [
+    "capacitor",
+    "ios",
+    "webview"
+  ],
+  "author": "My-Coach-Finder",
+  "license": "ISC",
+  "dependencies": {
+    "@capacitor/core": "^6.2.1",
+    "@capacitor/ios": "^6.2.1",
+    "@codetrix-studio/capacitor-google-auth": "^3.4.0-rc.4"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^6.2.1"
+  }
+}

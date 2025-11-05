@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>My-Coach-Finder</title>
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body, html {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+        #splash {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            z-index: 9999;
+            transition: opacity 0.5s ease-out;
+        }
+        #splash.hide {
+            opacity: 0;
+            pointer-events: none;
+        }
+        #splash h1 {
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 20px;
+        }
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div id="splash">
+        <h1>My-Coach-Finder</h1>
+        <div class="spinner"></div>
+    </div>
+
+    <script type="module">
+        import { Capacitor } from 'https://cdn.jsdelivr.net/npm/@capacitor/core@6/dist/esm/index.js';
+
+        console.log('[App] Starting My-Coach-Finder iOS App');
+        console.log('[App] Platform:', Capacitor.getPlatform());
+
+        // Automatically add ?os=apple to all my-coach-finder.com URLs
+        function addOSParam(url) {
+            if (!url.includes('my-coach-finder.com')) {
+                return url;
+            }
+
+            if (url.includes('os=apple') || url.includes('os=android') || url.includes('os=ios')) {
+                console.log('[App] URL already has os parameter:', url);
+                return url;
+            }
+
+            const separator = url.includes('?') ? '&' : '?';
+            const newUrl = url + separator + 'os=apple';
+            console.log('[App] Added os=apple:', url, '→', newUrl);
+            return newUrl;
+        }
+
+        // Import and initialize Google Auth plugin
+        let GoogleAuth;
+        try {
+            const module = await import('https://cdn.jsdelivr.net/npm/@codetrix-studio/capacitor-google-auth@3.4.0-rc.4/dist/esm/index.js');
+            GoogleAuth = module.GoogleAuth;
+            await GoogleAuth.initialize();
+            console.log('[App] Google Auth initialized');
+        } catch (error) {
+            console.error('[App] Failed to initialize Google Auth:', error);
+        }
+
+        // Listen for Google Sign-In messages from web app
+        window.addEventListener('message', async (event) => {
+            console.log('[App] Received message:', event.data);
+
+            if (event.data && event.data.type === 'GOOGLE_SIGN_IN') {
+                console.log('[App] Google Sign-In requested');
+
+                try {
+                    const result = await GoogleAuth.signIn();
+                    console.log('[App] Google Sign-In success:', result);
+
+                    // Send result back to web app
+                    window.postMessage({
+                        type: 'GOOGLE_SIGN_IN_SUCCESS',
+                        data: result
+                    }, '*');
+                } catch (error) {
+                    console.error('[App] Google Sign-In failed:', error);
+
+                    window.postMessage({
+                        type: 'GOOGLE_SIGN_IN_ERROR',
+                        error: error.message
+                    }, '*');
+                }
+            }
+        });
+
+        // Intercept link clicks to add os=apple
+        document.addEventListener('click', function(e) {
+            let el = e.target;
+
+            for (let i = 0; i < 10 && el; i++) {
+                if (el.tagName === 'A' && el.href) {
+                    const originalHref = el.href;
+                    const newHref = addOSParam(originalHref);
+
+                    if (newHref !== originalHref) {
+                        console.log('[App] Intercepting link click');
+                        e.preventDefault();
+                        window.location.href = newHref;
+                        return;
+                    }
+                }
+                el = el.parentElement;
+            }
+        }, true);
+
+        // Redirect to web app with os=apple
+        setTimeout(() => {
+            const targetUrl = addOSParam('https://app.my-coach-finder.com/go');
+            console.log('[App] Redirecting to:', targetUrl);
+            window.location.href = targetUrl;
+        }, 2000);
+    </script>
+</body>
+</html>
