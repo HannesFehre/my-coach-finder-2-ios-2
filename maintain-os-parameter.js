@@ -1,20 +1,18 @@
 /**
  * maintain-os-parameter.js
  *
- * Add this script to your web app to maintain the ?os=apple parameter
- * during all navigation. This ensures FastAPI, nginx, and JavaScript
- * can always detect the iOS app.
+ * Maintains the ?os=apple parameter during navigation in iOS app
  *
  * Usage: Include this script in your web app's HTML:
- * <script src="maintain-os-parameter.js"></script>
+ * <script src="/maintain-os-parameter.js"></script>
  */
 
 (function() {
     'use strict';
 
-    console.log('[OS Parameter] Maintenance script loaded');
+    console.log('[OS Param] Script loaded');
 
-    // Get current os parameter
+    // Get OS parameter from URL
     function getOSParameter() {
         const params = new URLSearchParams(window.location.search);
         return params.get('os');
@@ -25,65 +23,74 @@
         if (!url || !osValue) return url;
 
         try {
+            // Handle relative URLs
             const urlObj = new URL(url, window.location.origin);
 
-            // Only add to same-origin or my-coach-finder.com URLs
+            // Only modify my-coach-finder.com URLs
             if (!urlObj.host.includes('my-coach-finder.com')) {
                 return url;
             }
 
-            // Don't add if already exists
+            // Don't add if already has os parameter
             if (urlObj.searchParams.has('os')) {
                 return url;
             }
 
             urlObj.searchParams.set('os', osValue);
-            return urlObj.toString();
+            const newUrl = urlObj.toString();
+
+            console.log('[OS Param] Modified URL:', url, '→', newUrl);
+            return newUrl;
         } catch (e) {
-            // If URL parsing fails, try string manipulation
-            if (url.includes('?')) {
-                return url + '&os=' + osValue;
-            } else {
-                return url + '?os=' + osValue;
-            }
+            // Fallback for URLs that can't be parsed
+            console.warn('[OS Param] Could not parse URL:', url, e);
+            return url;
         }
     }
 
-    // Store the os parameter value
+    // Get and store os parameter
     const osValue = getOSParameter();
 
     if (!osValue) {
-        console.log('[OS Parameter] No os parameter found in URL');
+        console.log('[OS Param] No os parameter detected');
         return;
     }
 
-    console.log('[OS Parameter] Detected os=' + osValue);
+    console.log('[OS Param] Detected native app mode:', osValue);
 
-    // Store in sessionStorage for persistence
+    // Store in sessionStorage
     try {
         sessionStorage.setItem('os_parameter', osValue);
     } catch (e) {
-        console.warn('[OS Parameter] Could not save to sessionStorage:', e);
+        console.warn('[OS Param] Could not save to sessionStorage:', e);
     }
+
+    // Expose helper function globally
+    window.preserveOSParam = function(url) {
+        return addOSParameter(url, osValue);
+    };
 
     // Intercept all link clicks
     document.addEventListener('click', function(e) {
         let el = e.target;
 
-        // Traverse up to find <a> tag
+        // Find the <a> element (in case user clicked a child element)
         for (let i = 0; i < 10 && el; i++) {
             if (el.tagName === 'A' && el.href) {
                 const newHref = addOSParameter(el.href, osValue);
+
                 if (newHref !== el.href) {
                     e.preventDefault();
+                    e.stopPropagation();
+                    console.log('[OS Param] Intercepted link click');
                     window.location.href = newHref;
-                    console.log('[OS Parameter] Redirected with parameter:', newHref);
-                    return;
+                    return false;
                 }
+                break;
             }
             el = el.parentElement;
         }
-    }, true);
+    }, true); // Use capture phase
 
     // Intercept history.pushState
     const originalPushState = history.pushState;
@@ -115,11 +122,20 @@
         return originalFetch.call(window, url, options);
     };
 
-    // Check current URL has parameter
+    // Check if current page is missing the parameter
     if (!window.location.search.includes('os=' + osValue)) {
-        console.warn('[OS Parameter] Parameter missing from current URL, redirecting...');
-        window.location.href = addOSParameter(window.location.href, osValue);
+        console.warn('[OS Param] Parameter missing from current URL');
+
+        // Only redirect if we're on my-coach-finder.com
+        if (window.location.host.includes('my-coach-finder.com')) {
+            console.log('[OS Param] Redirecting to add parameter...');
+            const newUrl = addOSParameter(window.location.href, osValue);
+            if (newUrl !== window.location.href) {
+                window.location.replace(newUrl);
+            }
+        }
     }
 
-    console.log('[OS Parameter] Maintenance active - parameter will persist');
+    console.log('[OS Param] Maintenance active - parameter will persist during navigation');
+
 })();
