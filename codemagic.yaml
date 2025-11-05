@@ -1,0 +1,267 @@
+workflows:
+  ios-development:
+    name: iOS Development Build
+    max_build_duration: 120
+    instance_type: mac_mini_m1
+    environment:
+      ios_signing:
+        distribution_type: development
+        bundle_identifier: MyCoachFinder
+      vars:
+        XCODE_WORKSPACE: "ios/App/App.xcworkspace"
+        XCODE_SCHEME: "App"
+        BUNDLE_IDENTIFIER: "MyCoachFinder"
+      node: 20.19.5
+      xcode: latest
+      cocoapods: default
+    scripts:
+      - name: Install npm dependencies
+        script: |
+          npm install
+
+      - name: Install CocoaPods dependencies
+        script: |
+          cd ios/App && pod install
+
+      - name: Sync Capacitor assets to iOS
+        script: |
+          npx cap sync ios
+
+      - name: Set up keychain
+        script: |
+          keychain initialize
+
+      - name: Add certificates to keychain
+        script: |
+          keychain add-certificates
+
+      - name: Set up code signing settings
+        script: |
+          xcode-project use-profiles
+
+      - name: Build iOS app
+        script: |
+          xcode-project build-ipa \
+            --workspace "$XCODE_WORKSPACE" \
+            --scheme "$XCODE_SCHEME" \
+            --archive-flags="-destination 'generic/platform=iOS'"
+
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+
+    publishing:
+      email:
+        recipients:
+          - info@boothtml.com
+        notify:
+          success: true
+          failure: true
+
+  ios-production:
+    name: iOS App Store Build
+    max_build_duration: 120
+    instance_type: mac_mini_m1
+    environment:
+      groups:
+        - ios_signing
+      vars:
+        XCODE_WORKSPACE: "ios/App/App.xcworkspace"
+        XCODE_SCHEME: "App"
+        BUNDLE_IDENTIFIER: "MyCoachFinder"
+        APP_STORE_ID: "6503015097"
+      node: 20.19.5
+      xcode: latest
+      cocoapods: default
+    scripts:
+      - name: Install npm dependencies
+        script: |
+          npm install
+
+      - name: Install CocoaPods dependencies
+        script: |
+          cd ios/App && pod install
+
+      - name: Sync Capacitor assets to iOS
+        script: |
+          npx cap sync ios
+
+      - name: Set up keychain
+        script: |
+          keychain initialize
+
+      - name: Set up code signing
+        script: |
+          set -e
+
+          # Get the default keychain path
+          KEYCHAIN_PATH=$(security default-keychain -d user | tr -d '"' | xargs)
+          echo "Using keychain: $KEYCHAIN_PATH"
+
+          # Decode and save certificate
+          echo "$CM_CERTIFICATE" | base64 --decode > /tmp/distribution.p12
+
+          # Verify certificate file size and hash
+          echo "Certificate size: $(ls -lh /tmp/distribution.p12 | awk '{print $5}')"
+          CERT_MD5=$(md5sum /tmp/distribution.p12 | cut -d' ' -f1)
+          echo "Certificate MD5: $CERT_MD5"
+
+          # Check which certificate we have
+          if [ "$CERT_MD5" = "7bdf966d6f7c5279b8acb777b9129569" ]; then
+            echo "Certificate type: Original Linux-created (SHA256)"
+          elif [ "$CERT_MD5" = "a32cb8ca351f144927f8d9f61bf14321" ]; then
+            echo "Certificate type: macOS-compatible (SHA1-3DES)"
+          else
+            echo "Certificate type: Unknown"
+          fi
+          echo "Base64 length: ${#CM_CERTIFICATE}"
+
+          # Debug: Check CM_CERTIFICATE_PASSWORD variable
+          echo ""
+          echo "Debug: CM_CERTIFICATE_PASSWORD info:"
+          echo "  Length: ${#CM_CERTIFICATE_PASSWORD}"
+          echo "  First 3 chars: ${CM_CERTIFICATE_PASSWORD:0:3}***"
+          echo ""
+          echo "Testing certificate with various passwords..."
+
+          # Test password without special chars (check exit code, not output)
+          if openssl pkcs12 -in /tmp/distribution.p12 -passin pass:"MyCoachFinder2024" -noout 2>/dev/null; then
+            echo "✓ Password is: MyCoachFinder2024 (NEW certificate)"
+            CERT_PASSWORD="MyCoachFinder2024"
+          # Test password with exclamation
+          elif openssl pkcs12 -in /tmp/distribution.p12 -passin pass:"MyCoachFinder2024!" -noout 2>/dev/null; then
+            echo "✓ Password is: MyCoachFinder2024! (OLD certificate)"
+            CERT_PASSWORD="MyCoachFinder2024!"
+          # Test with CM_CERTIFICATE_PASSWORD variable
+          elif openssl pkcs12 -in /tmp/distribution.p12 -passin pass:"$CM_CERTIFICATE_PASSWORD" -noout 2>/dev/null; then
+            echo "✓ Password matches CM_CERTIFICATE_PASSWORD variable"
+            CERT_PASSWORD="$CM_CERTIFICATE_PASSWORD"
+          else
+            echo "❌ ERROR: Certificate does not match any known password!"
+            echo ""
+            echo "DEBUG: Let's see the actual OpenSSL errors..."
+            echo ""
+            echo "Test 1 - Hardcoded password (no quotes):"
+            openssl pkcs12 -in /tmp/distribution.p12 -passin pass:MyCoachFinder2024 -noout 2>&1
+            echo "Exit code: $?"
+            echo ""
+            echo "Test 2 - With double quotes:"
+            openssl pkcs12 -in /tmp/distribution.p12 -passin pass:"MyCoachFinder2024" -noout 2>&1
+            echo "Exit code: $?"
+            echo ""
+            echo "Test 3 - With stdin:"
+            echo "MyCoachFinder2024" | openssl pkcs12 -in /tmp/distribution.p12 -passin stdin -noout 2>&1
+            echo "Exit code: $?"
+            echo ""
+            echo "Test 4 - Check if file exists and size:"
+            ls -la /tmp/distribution.p12
+            file /tmp/distribution.p12
+            echo ""
+            echo "Test 5 - Try to extract cert info (will show MAC error):"
+            openssl pkcs12 -in /tmp/distribution.p12 -passin pass:MyCoachFinder2024 -info 2>&1 | head -5
+            echo ""
+            exit 1
+          fi
+
+          # Import certificate with the detected password
+          echo ""
+          echo "Importing certificate..."
+          security import /tmp/distribution.p12 \
+            -k "$KEYCHAIN_PATH" \
+            -P MyCoachFinder2024 \
+            -T /usr/bin/codesign \
+            -T /usr/bin/security \
+            -A
+
+          if [ $? -eq 0 ]; then
+            echo "✅ Certificate imported successfully"
+          else
+            echo "❌ Certificate import failed"
+            exit 1
+          fi
+
+          # Set key partition list (allow codesign to access the key without password)
+          echo "Setting key partition list..."
+          security set-key-partition-list -S apple-tool:,apple: -s -k "" "$KEYCHAIN_PATH" 2>&1 || true
+          echo "✅ Key partition list updated (or skipped if not needed)"
+
+          # Decode and install provisioning profile
+          echo ""
+          echo "Installing provisioning profile..."
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          echo "$CM_PROVISIONING_PROFILE" | base64 --decode > /tmp/profile.mobileprovision
+
+          if [ ! -f /tmp/profile.mobileprovision ]; then
+            echo "❌ Failed to decode provisioning profile"
+            exit 1
+          fi
+          echo "✅ Provisioning profile decoded"
+
+          # Get profile UUID and install
+          echo "Extracting provisioning profile UUID..."
+
+          # Decode the provisioning profile
+          security cms -D -i /tmp/profile.mobileprovision > /tmp/profile_content.txt 2>&1
+
+          # Extract UUID - it's on the line after <key>UUID</key>
+          PROFILE_UUID=$(grep -A 1 '<key>UUID</key>' /tmp/profile_content.txt | grep -o '[a-f0-9]\{8\}-[a-f0-9]\{4\}-[a-f0-9]\{4\}-[a-f0-9]\{4\}-[a-f0-9]\{12\}' | head -1)
+
+          if [ -z "$PROFILE_UUID" ]; then
+            echo "❌ Failed to extract provisioning profile UUID"
+            echo "Showing UUID section:"
+            grep -A 1 '<key>UUID</key>' /tmp/profile_content.txt
+            exit 1
+          fi
+
+          echo "Installing provisioning profile: $PROFILE_UUID"
+          cp /tmp/profile.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/$PROFILE_UUID.mobileprovision
+          echo "✅ Provisioning profile installed"
+
+          # Verify installation
+          echo ""
+          echo "Verifying code signing setup..."
+          echo "Certificates in keychain:"
+          security find-identity -v -p codesigning "$KEYCHAIN_PATH"
+
+          echo ""
+          echo "Installed provisioning profiles:"
+          ls -la ~/Library/MobileDevice/Provisioning\ Profiles/
+
+          echo ""
+          echo "✅ Code signing setup complete!"
+
+      - name: Set up Xcode project signing
+        script: |
+          cd ios/App
+          xcode-project use-profiles
+
+      - name: Increment build number
+        script: |
+          cd ios/App
+          agvtool new-version -all $(($BUILD_NUMBER + 1))
+
+      - name: Build iOS app
+        script: |
+          xcode-project build-ipa \
+            --workspace "$XCODE_WORKSPACE" \
+            --scheme "$XCODE_SCHEME" \
+            --archive-flags="-destination 'generic/platform=iOS'"
+
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+
+    publishing:
+      app_store_connect:
+        api_key: $APP_STORE_CONNECT_PRIVATE_KEY
+        key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
+        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
+        submit_to_testflight: true
+        submit_to_app_store: false
+
+      email:
+        recipients:
+          - info@boothtml.com
+        notify:
+          success: true
+          failure: true
